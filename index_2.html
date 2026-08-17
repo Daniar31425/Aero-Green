@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Зелёный дозор — мониторинг зелёного фонда Шымкента</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --paper:#EEF1E6;
+    --paper-card:#E3E7D6;
+    --ink:#1C2B1F;
+    --ink-soft:#4B5A4C;
+    --hairline:#C6CBB7;
+    --moss:#3F5B3B;
+    --moss-dark:#28391F;
+    --good:#4C7A3F;
+    --mid:#C68A3D;
+    --bad:#B4472F;
+    --white:#FBFCF8;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  html,body{height:100%;}
+
+  body{
+    font-family:"Public Sans", sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    overflow:hidden;
+  }
+
+  .app{
+    display:grid;
+    grid-template-columns: 380px 1fr;
+    height:100vh;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    background:var(--paper);
+    border-right:1px solid var(--hairline);
+    display:flex;
+    flex-direction:column;
+    overflow-y:auto;
+  }
+
+  .sidebar-inner{
+    padding:28px 26px 40px;
+  }
+
+  .eyebrow{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--moss);
+    margin-bottom:10px;
+  }
+
+  h1{
+    font-family:"Fraunces", serif;
+    font-weight:600;
+    font-size:30px;
+    line-height:1.12;
+    color:var(--moss-dark);
+    margin-bottom:10px;
+  }
+
+  .subtitle{
+    font-size:13.5px;
+    color:var(--ink-soft);
+    line-height:1.5;
+    margin-bottom:26px;
+  }
+
+  .section-title{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin:26px 0 12px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .section-title::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:var(--hairline);
+  }
+
+  /* upload */
+  .upload-box{
+    border:1.5px dashed var(--moss);
+    border-radius:2px;
+    padding:16px;
+    text-align:center;
+    background:var(--paper-card);
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  .upload-box:hover{ background:#DAE0C9; }
+  .upload-box input{ display:none; }
+  .upload-label{
+    font-size:13px;
+    font-weight:600;
+    color:var(--moss-dark);
+  }
+  .upload-hint{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:10.5px;
+    color:var(--ink-soft);
+    margin-top:6px;
+  }
+
+  .status-line{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11px;
+    color:var(--moss);
+    margin-top:10px;
+    min-height:14px;
+  }
+  .status-line.demo{ color:#9A7A2E; }
+
+  /* stats grid */
+  .stats{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:1px;
+    background:var(--hairline);
+    border:1px solid var(--hairline);
+  }
+  .stat{
+    background:var(--paper);
+    padding:14px 14px 12px;
+  }
+  .stat-value{
+    font-family:"Fraunces", serif;
+    font-weight:600;
+    font-size:26px;
+    color:var(--moss-dark);
+    line-height:1;
+  }
+  .stat-label{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:10px;
+    letter-spacing:0.04em;
+    color:var(--ink-soft);
+    margin-top:6px;
+    text-transform:uppercase;
+  }
+
+  /* legend gauge */
+  .gauge{
+    height:14px;
+    border-radius:2px;
+    background:linear-gradient(90deg, var(--bad), var(--mid), var(--good));
+    position:relative;
+    margin-top:6px;
+  }
+  .gauge-labels{
+    display:flex;
+    justify-content:space-between;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    margin-top:6px;
+  }
+
+  /* flagged list */
+  .flagged-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .flagged-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:9px 10px;
+    background:var(--paper-card);
+    border-radius:2px;
+    cursor:pointer;
+    transition:background .12s ease;
+  }
+  .flagged-item:hover{ background:#DAE0C9; }
+  .flagged-dot{
+    width:9px; height:9px;
+    border-radius:50%;
+    flex-shrink:0;
+  }
+  .flagged-coord{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11.5px;
+    color:var(--ink);
+  }
+  .flagged-index{
+    margin-left:auto;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+  }
+  .empty-note{
+    font-size:12px;
+    color:var(--ink-soft);
+    font-style:italic;
+  }
+
+  .footer-note{
+    margin-top:30px;
+    font-size:11px;
+    color:var(--ink-soft);
+    line-height:1.6;
+    border-top:1px solid var(--hairline);
+    padding-top:14px;
+  }
+
+  /* ---------- Map ---------- */
+  .map-wrap{ position:relative; }
+  #map{ height:100%; width:100%; background:var(--paper); }
+
+  .leaflet-popup-content-wrapper{
+    background:var(--white);
+    border-radius:2px;
+    box-shadow:0 4px 18px rgba(28,43,31,0.18);
+  }
+  .leaflet-popup-content{
+    font-family:"Public Sans", sans-serif;
+    font-size:12.5px;
+    margin:12px 14px;
+  }
+  .popup-index{
+    font-family:"IBM Plex Mono", monospace;
+    font-weight:600;
+    font-size:15px;
+    margin-bottom:2px;
+  }
+  .popup-coord{
+    font-family:"IBM Plex Mono", monospace;
+    color:var(--ink-soft);
+    font-size:11px;
+  }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--hairline); border-radius:4px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+      <div class="eyebrow">SmartCity Hackathon · Зелёный фонд</div>
+      <h1>Зелёный дозор</h1>
+      <p class="subtitle">
+        Автономный облёт зелёных зон дроном с расчётом RGB-индекса здоровья
+        растительности по каждому кадру видео.
+      </p>
+
+      <div class="section-title">Данные облёта</div>
+      <label class="upload-box">
+        <input type="file" id="csvInput" accept=".csv" />
+        <div class="upload-label">Загрузить result.csv</div>
+        <div class="upload-hint">колонки: lat, lon, veg_index, frame_time</div>
+      </label>
+      <div class="status-line" id="statusLine">Данные реального облёта · сквер им. Калдаякова</div>
+
+      <div class="section-title">Сводка</div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value" id="statTotal">—</div>
+          <div class="stat-label">точек снято</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statAvg">—</div>
+          <div class="stat-label">средний индекс</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statGood">—</div>
+          <div class="stat-label">в норме</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statBad">—</div>
+          <div class="stat-label">нужен осмотр</div>
+        </div>
+      </div>
+
+      <div class="section-title">Шкала индекса зелени</div>
+      <div class="gauge"></div>
+      <div class="gauge-labels">
+        <span>сухо / стресс</span>
+        <span>здоровая зелень</span>
+      </div>
+
+      <div class="section-title">Требуют внимания</div>
+      <div class="flagged-list" id="flaggedList">
+        <div class="empty-note">нет данных</div>
+      </div>
+
+      <div class="footer-note">
+        Индекс рассчитан по формуле Excess Green (ExG) на кадрах видео,
+        без мультиспектральной камеры — практичная замена NDVI для MVP.
+        Полный переход на раннюю диагностику заболеваний растений
+        запланирован после подключения ИК-сенсора.
+      </div>
+    </div>
+  </aside>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+  </div>
+</div>
+
+<script>
+  // ---------- Данные реального облёта над сквером им. Калдаякова, Шымкент ----------
+  const DEMO_DATA = [
+    { lat: 42.3124458, lon: 69.6039347, veg_index: 0.0058, frame_time: 8 },
+    { lat: 42.3124457, lon: 69.6039345, veg_index: -0.0036, frame_time: 10 },
+    { lat: 42.3124467, lon: 69.6039339, veg_index: 0.0835, frame_time: 12 },
+    { lat: 42.3124454, lon: 69.6039346, veg_index: 0.1730, frame_time: 14 },
+    { lat: 42.3124453, lon: 69.6039353, veg_index: 0.1652, frame_time: 16 },
+    { lat: 42.3124451, lon: 69.6039345, veg_index: 0.1793, frame_time: 18 },
+    { lat: 42.3124458, lon: 69.6039345, veg_index: 0.1324, frame_time: 20 },
+    { lat: 42.3124459, lon: 69.6039352, veg_index: 0.1495, frame_time: 22 },
+    { lat: 42.3124614, lon: 69.6039410, veg_index: 0.1461, frame_time: 24 },
+    { lat: 42.3125225, lon: 69.6039576, veg_index: 0.1509, frame_time: 26 },
+    { lat: 42.3125404, lon: 69.6038933, veg_index: 0.2302, frame_time: 28 },
+    { lat: 42.3125704, lon: 69.6037827, veg_index: 0.1437, frame_time: 30 },
+    { lat: 42.3125998, lon: 69.6036708, veg_index: 0.1689, frame_time: 32 },
+    { lat: 42.3126261, lon: 69.6035646, veg_index: 0.2106, frame_time: 34 },
+    { lat: 42.3126253, lon: 69.6035116, veg_index: 0.2012, frame_time: 36 },
+    { lat: 42.3125696, lon: 69.6034736, veg_index: 0.1497, frame_time: 38 },
+    { lat: 42.3125005, lon: 69.6034308, veg_index: 0.1602, frame_time: 40 },
+    { lat: 42.3124636, lon: 69.6034480, veg_index: 0.2210, frame_time: 42 },
+    { lat: 42.3124441, lon: 69.6035076, veg_index: 0.1546, frame_time: 44 },
+    { lat: 42.3124912, lon: 69.6035348, veg_index: 0.2262, frame_time: 46 },
+    { lat: 42.3125336, lon: 69.6035730, veg_index: 0.2251, frame_time: 48 },
+    { lat: 42.3125333, lon: 69.6035929, veg_index: 0.1802, frame_time: 50 },
+    { lat: 42.3125347, lon: 69.6035916, veg_index: 0.2006, frame_time: 52 },
+    { lat: 42.3125362, lon: 69.6035925, veg_index: 0.1883, frame_time: 54 },
+    { lat: 42.3125359, lon: 69.6035922, veg_index: 0.1585, frame_time: 56 },
+    { lat: 42.3125355, lon: 69.6035928, veg_index: 0.2034, frame_time: 58 },
+    { lat: 42.3125342, lon: 69.6035930, veg_index: 0.1224, frame_time: 60 },
+    { lat: 42.3125335, lon: 69.6035951, veg_index: 0.1082, frame_time: 62 },
+    { lat: 42.3125147, lon: 69.6036757, veg_index: 0.1509, frame_time: 64 },
+    { lat: 42.3124857, lon: 69.6037865, veg_index: 0.1267, frame_time: 66 },
+    { lat: 42.3124605, lon: 69.6038809, veg_index: 0.1313, frame_time: 68 },
+    { lat: 42.3124531, lon: 69.6039088, veg_index: 0.1533, frame_time: 70 },
+    { lat: 42.3124503, lon: 69.6039079, veg_index: 0.1706, frame_time: 72 },
+    { lat: 42.3124507, lon: 69.6039161, veg_index: 0.1478, frame_time: 74 },
+    { lat: 42.3124493, lon: 69.6039206, veg_index: 0.1475, frame_time: 76 },
+    { lat: 42.3124466, lon: 69.6039240, veg_index: 0.1453, frame_time: 78 },
+    { lat: 42.3124476, lon: 69.6039292, veg_index: 0.1498, frame_time: 80 },
+    { lat: 42.3124486, lon: 69.6039318, veg_index: 0.1347, frame_time: 82 },
+    { lat: 42.3124498, lon: 69.6039322, veg_index: 0.1022, frame_time: 84 },
+    { lat: 42.3124478, lon: 69.6039344, veg_index: 0.0467, frame_time: 86 },
+    { lat: 42.3124472, lon: 69.6039348, veg_index: -0.0012, frame_time: 88 },
+    { lat: 42.3124490, lon: 69.6039341, veg_index: 0.0052, frame_time: 90 },
+    { lat: 42.3124467, lon: 69.6039345, veg_index: 0.0050, frame_time: 92 },
+    { lat: 42.3124463, lon: 69.6039334, veg_index: 0.0071, frame_time: 94 },
+    { lat: 42.3124466, lon: 69.6039353, veg_index: 0.0079, frame_time: 96 },
+  ];
+
+  let map, flightLine;
+  let markers = [];
+
+  function initMap(){
+    map = L.map('map', { zoomControl: false }).setView([42.3125, 69.6037], 18);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(map);
+  }
+
+  function colorForIndex(v, min, max){
+    // нормализуем в 0..1 относительно диапазона текущих данных
+    const t = max > min ? (v - min) / (max - min) : 0.5;
+    if (t < 0.5) {
+      return lerpColor('#B4472F', '#C68A3D', t / 0.5);
+    }
+    return lerpColor('#C68A3D', '#4C7A3F', (t - 0.5) / 0.5);
+  }
+
+  function lerpColor(a, b, t){
+    const pa = hexToRgb(a), pb = hexToRgb(b);
+    const r = Math.round(pa.r + (pb.r - pa.r) * t);
+    const g = Math.round(pa.g + (pb.g - pa.g) * t);
+    const bl = Math.round(pa.b + (pb.b - pa.b) * t);
+    return `rgb(${r},${g},${bl})`;
+  }
+  function hexToRgb(hex){
+    const n = parseInt(hex.slice(1), 16);
+    return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+  }
+
+  function render(data, isDemo){
+    // очистка предыдущего рендера
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    if (flightLine) map.removeLayer(flightLine);
+
+    if (!data.length) return;
+
+    const values = data.map(d => d.veg_index);
+    const min = Math.min(...values), max = Math.max(...values);
+    const avg = values.reduce((a,b)=>a+b,0) / values.length;
+    const goodCount = data.filter(d => d.veg_index >= min + (max-min)*0.6).length;
+    const badCount = data.filter(d => d.veg_index <= min + (max-min)*0.25).length;
+
+    document.getElementById('statTotal').textContent = data.length;
+    document.getElementById('statAvg').textContent = avg.toFixed(2);
+    document.getElementById('statGood').textContent = goodCount;
+    document.getElementById('statBad').textContent = badCount;
+
+    // маршрут полёта — линия по порядку точек
+    const latlngs = data.map(d => [d.lat, d.lon]);
+    flightLine = L.polyline(latlngs, {
+      color: '#3F5B3B', weight: 2, opacity: 0.55, dashArray: '1 8', lineCap: 'round'
+    }).addTo(map);
+
+    const flaggedList = document.getElementById('flaggedList');
+    flaggedList.innerHTML = '';
+    let flaggedCount = 0;
+
+    data.forEach((d, i) => {
+      const color = colorForIndex(d.veg_index, min, max);
+      const marker = L.circleMarker([d.lat, d.lon], {
+        radius: 7,
+        color: '#1C2B1F',
+        weight: 1,
+        fillColor: color,
+        fillOpacity: 0.92,
+      }).addTo(map);
+
+      marker.bindPopup(`
+        <div class="popup-index" style="color:${color}">Индекс ${d.veg_index.toFixed(2)}</div>
+        <div class="popup-coord">${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}</div>
+        <div class="popup-coord">кадр на ${d.frame_time}с полёта</div>
+      `);
+
+      markers.push(marker);
+
+      if (d.veg_index <= min + (max-min)*0.25 && flaggedCount < 6) {
+        flaggedCount++;
+        const item = document.createElement('div');
+        item.className = 'flagged-item';
+        item.innerHTML = `
+          <span class="flagged-dot" style="background:${color}"></span>
+          <span class="flagged-coord">${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}</span>
+          <span class="flagged-index">${d.veg_index.toFixed(2)}</span>
+        `;
+        item.addEventListener('click', () => {
+          map.setView([d.lat, d.lon], 18);
+          marker.openPopup();
+        });
+        flaggedList.appendChild(item);
+      }
+    });
+
+    if (flaggedCount === 0) {
+      flaggedList.innerHTML = '<div class="empty-note">точек с низким индексом нет</div>';
+    }
+
+    map.fitBounds(latlngs, { padding: [40,40] });
+
+    const statusLine = document.getElementById('statusLine');
+    if (isDemo) {
+      statusLine.textContent = 'Данные реального облёта · сквер им. Калдаякова';
+      statusLine.classList.remove('demo');
+    } else {
+      statusLine.textContent = `Загружено: ${data.length} точек из вашего файла`;
+      statusLine.classList.remove('demo');
+    }
+  }
+
+  function parseCSV(file){
+    Papa.parse(file, {
+      header: true,
+      dynamicTyping: true,
+      skipEmptyLines: true,
+      complete: function(results){
+        const rows = results.data
+          .filter(r => r.lat != null && r.lon != null && r.veg_index != null)
+          .map(r => ({
+            lat: Number(r.lat),
+            lon: Number(r.lon),
+            veg_index: Number(r.veg_index),
+            frame_time: r.frame_time != null ? Number(r.frame_time) : null,
+          }));
+
+        if (!rows.length) {
+          document.getElementById('statusLine').textContent = 'Не нашли нужные колонки в файле (lat, lon, veg_index)';
+          return;
+        }
+        render(rows, false);
+      },
+      error: function(){
+        document.getElementById('statusLine').textContent = 'Не получилось прочитать файл';
+      }
+    });
+  }
+
+  document.getElementById('csvInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) parseCSV(file);
+  });
+
+  initMap();
+  render(DEMO_DATA, true);
+</script>
+
+</body>
+</html>
